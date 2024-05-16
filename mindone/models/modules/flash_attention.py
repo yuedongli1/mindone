@@ -6,6 +6,8 @@ import mindspore as ms
 from mindspore import nn, ops
 
 from mindone.utils.version_control import check_valid_flash_attention, choose_flash_attention_dtype
+from mindone.models.modules.utils import get_sp_chuncks
+from mindone.models.modules.ring_attention import RingAttention
 
 FLASH_IS_AVAILABLE = check_valid_flash_attention()
 USE_NEW_FA = False
@@ -58,12 +60,22 @@ class MSFlashAttention(nn.Cell):
     ):
         super().__init__()
         assert FLASH_IS_AVAILABLE, "FlashAttention is not Available!"
-        self.use_new_flash_attention = USE_NEW_FA
+        self.use_ring_attention = True
+        if self.use_ring_attention:
+            logger.info("use ring attention")
+        self.use_new_flash_attention = USE_NEW_FA if not self.use_ring_attention else False
         self.input_layout = input_layout
         if input_layout not in ["BSH", "BNSD"]:
             raise ValueError(f"input_layout must be in ['BSH', 'BNSD'], but get {input_layout}.")
         self.head_dim = head_dim
-        if self.use_new_flash_attention:
+        if self.use_ring_attention:
+            self.flash_attention = RingAttention(
+                scale_value=head_dim ** -0.5,
+                head_num=head_num,
+                input_layout="SBH",
+                keep_prob=1 - attention_dropout,
+            )
+        elif self.use_new_flash_attention:
             self.flash_attention = FlashAttention(
                 scale_value=head_dim**-0.5,
                 head_num=head_num,
@@ -117,7 +129,7 @@ class MSFlashAttention(nn.Cell):
         return x.to(dtype)
 
     def construct(self, q, k, v, mask=None):
-        if not self.use_new_flash_attention:
+        if not self.use_new_flash_attention and not self.use_ring_attention:
             B, N, S1, D = q.shape
             S2 = k.shape[2]
             if mask is None:
@@ -136,6 +148,17 @@ class MSFlashAttention(nn.Cell):
         v = self._rearange_input(v)
         if mask is not None:
             mask = mask.to(ms.uint8)
-        out = self.flash_attention(q, k, v, None, None, None, mask)[3]
+
+        if self.use_ring_attention:
+            q = q.transpose(1, 0, 2)
+            k = k.transpose(1, 0, 2)
+            v = v.transpose(1, 0, 2)
+            q = get_sp_chuncks(q)
+            k = get_sp_chuncks(k)
+            v = get_sp_chuncks(v)
+            out = self.flash_attention(q, k, v, None, None, None, mask)
+            out = out.transpose(1, 0, 2)
+        else:
+            out = self.flash_attention(q, k, v, None, None, None, mask)[3]
         out = self._rearange_output(out, q_dtype)
         return out
