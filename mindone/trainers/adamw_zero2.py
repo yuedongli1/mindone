@@ -1,8 +1,9 @@
 "AdamWeightDecay Optimizer"
 import numpy as np
 
+import mindspore as ms
 from mindspore.common import dtype as mstype
-from mindspore import ParameterTuple, Tensor, ops
+from mindspore import ParameterTuple, Tensor, ops, mint
 from mindspore.ops import operations as P
 from mindspore.ops import functional as F
 from mindspore.nn.optim.optimizer import Optimizer
@@ -38,14 +39,12 @@ def _split_params_to_fp32(shard_id, shard_size, param, need_split):
     """
     Split parameters.
     """
-    split = P.Split(0, shard_size)
-    cast = P.Cast()
     if need_split:
-        splited_param = split(param)[shard_id]
+        splited_param = mint.split(param, param.shape[0] // shard_size, 0)[shard_id]
     else:
         splited_param = param
     if splited_param.dtype != mstype.float32:
-        splited_param = cast(splited_param, mstype.float32)
+        splited_param = ops.cast(splited_param, mstype.float32)
     return splited_param
 
 
@@ -54,11 +53,10 @@ def _update_params_opt_parallel(param, update, all_gather):
     """
     Allgather updated parameters and load.
     """
-    cast = P.Cast()
     if all_gather:
         update = all_gather(update)
     if update.dtype != param.dtype:
-        update = cast(update, param.dtype)
+        update = ops.cast(update, param.dtype)
     param.assign_value(update)
 
 
@@ -196,8 +194,8 @@ class AdamWeightDecayZeRO2(Optimizer):
         """Register hook for model parameters for optimizer parallel."""
         def reduce_scatter_hook(grad):
             allreduce = P.AllReduce()
-            split = P.Split(0, self.shard_size)
-            return split(allreduce(grad))[self.shard_id]
+            allreduce_grad = allreduce(grad)
+            return mint.split(allreduce_grad, allreduce_grad.shape[0] // self.shard_size, 0)[self.shard_id]
         def reduce_hook(grad):
             allreduce = P.AllReduce()
             return allreduce(grad)

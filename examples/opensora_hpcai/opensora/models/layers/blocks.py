@@ -5,7 +5,7 @@ from typing import Optional, Tuple, Type, Union
 import numpy as np
 
 import mindspore as ms
-from mindspore import Parameter, Tensor, nn, ops
+from mindspore import Parameter, Tensor, nn, ops, mint
 from mindspore.common.initializer import initializer
 
 from mindone.models.modules.flash_attention import FLASH_IS_AVAILABLE, MSFlashAttention
@@ -158,7 +158,7 @@ class MultiHeadCrossAttention(nn.Cell):
 
         # kv: (B N_k C*2) -> (B N_k 2 C) -> (B N_k 2 num_head head_dim).
         kv = ops.reshape(kv, (B, N_k, 2, self.num_heads, self.head_dim))
-        k, v = ops.split(kv, 1, axis=2)
+        k, v = mint.split(kv, 1, axis=2)
         # (b n h d)
         k = ops.squeeze(k, axis=2)
         v = ops.squeeze(v, axis=2)
@@ -258,7 +258,7 @@ class SelfAttention(nn.Cell):
         qkv = self.qkv(x)
         # (b, n, 3*h*d) -> (b, n, 3, h, d)
         qkv = ops.reshape(qkv, (B, N, 3, self.num_heads, self.head_dim))
-        q, k, v = ops.split(qkv, 1, axis=2)  # (b n h d)
+        q, k, v = mint.split(qkv, 1, axis=2)  # (b n h d)
         q = ops.squeeze(q, axis=2)
         k = ops.squeeze(k, axis=2)
         v = ops.squeeze(v, axis=2)
@@ -307,11 +307,11 @@ class LayerNorm(nn.Cell):
         else:
             self.gamma = ops.ones(normalized_shape, dtype=dtype)
             self.beta = ops.zeros(normalized_shape, dtype=dtype)
-        self.layer_norm = ops.LayerNorm(-1, -1, epsilon=eps)
 
     def construct(self, x: Tensor):
-        x, _, _ = self.layer_norm(x, self.gamma, self.beta)
-        return x
+        oridtype = x.dtype
+        x = ops.layer_norm(x.to(ms.float32), self.normalized_shape, self.gamma.to(ms.float32), self.beta.to(ms.float32), self.eps)
+        return x.to(oridtype)
 
 
 class GELU(nn.GELU):
@@ -368,11 +368,11 @@ class PatchEmbed3D(nn.Cell):
         # padding
         _, _, D, H, W = x.shape
         if W % self.patch_size[2] != 0:
-            x = ops.pad(x, (0, self.patch_size[2] - W % self.patch_size[2]))
+            x = ops.pad_ext(x, (0, self.patch_size[2] - W % self.patch_size[2]))
         if H % self.patch_size[1] != 0:
-            x = ops.pad(x, (0, 0, 0, self.patch_size[1] - H % self.patch_size[1]))
+            x = ops.pad_ext(x, (0, 0, 0, self.patch_size[1] - H % self.patch_size[1]))
         if D % self.patch_size[0] != 0:
-            x = ops.pad(x, (0, 0, 0, 0, 0, self.patch_size[0] - D % self.patch_size[0]))
+            x = ops.pad_ext(x, (0, 0, 0, 0, 0, self.patch_size[0] - D % self.patch_size[0]))
 
         x = self.proj(x)  # (B C T H W)
         if self.norm is not None:

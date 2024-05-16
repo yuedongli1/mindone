@@ -36,6 +36,7 @@ from mindone.trainers.train_step import TrainOneStepWrapper
 from mindone.utils.logger import set_logger
 from mindone.utils.params import count_params
 from mindone.utils.seed import set_random_seed
+from mindone.trainers.adamw_zero2 import AdamWeightDecayZeRO2
 from mindone.models.modules.utils import init_sp_group
 
 # from opensora.utils.model_utils import WHITELIST_OPS

@@ -166,7 +166,7 @@ class PreTrainedModel(nn.Cell, CellUtilMixin, GenerationMixin):
 
         if output_embeddings.has_bias:
             output_embeddings.bias.set_data(
-                ops.pad(
+                ops.pad_ext(
                     output_embeddings.bias.data,
                     (0, output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0]),
                     "constant",

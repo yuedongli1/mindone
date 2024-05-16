@@ -23,7 +23,7 @@ def _extract_into_tensor(a, t, x_shape):
     :return: a tensor of shape [batch_size, 1, ...] where the shape has K dims.
     """
     b = t.shape[0]
-    out = ops.GatherD()(a, -1, t)
+    out = ops.extend.gather(a, -1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
 

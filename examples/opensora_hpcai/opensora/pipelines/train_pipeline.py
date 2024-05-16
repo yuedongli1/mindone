@@ -2,7 +2,7 @@ import logging
 from typing import Optional, Tuple
 
 import mindspore as ms
-from mindspore import Tensor, nn, ops
+from mindspore import Tensor, nn, ops, mint
 
 from ..schedulers.iddpm import SpacedDiffusion
 from ..schedulers.iddpm.diffusion_utils import (
@@ -275,7 +275,7 @@ class DiffusionWithLoss(nn.Cell):
         # (b c t h w),
         B, C, F = x_t.shape[:3]
         assert model_output.shape == (B, C * 2, F) + x_t.shape[3:]
-        model_output, model_var_values = ops.split(model_output, C, axis=1)
+        model_output, model_var_values = mint.split(model_output, C, axis=1)
 
         # Learn the variance using the variational bound, but don't let it affect our mean prediction.
         vb = self._cal_vb(ops.stop_gradient(model_output), model_var_values, x, x_t, t, frames_mask)
