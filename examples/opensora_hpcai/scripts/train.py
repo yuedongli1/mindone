@@ -165,7 +165,7 @@ def main(args):
     )
 
     # init for sp
-    # init_sp_group(device_num)
+    init_sp_group(device_num // 2)
 
     set_logger(name="", output_dir=args.output_path, rank=rank_id, log_level=eval(args.log_level))
 

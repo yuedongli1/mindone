@@ -1,80 +1,123 @@
-import utils
-import mindspore as ms
+# Copyright 2024 Huawei Technologies Co., Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ============================================================================
+"""Test Ring Attention."""
 import numpy as np
-import mindspore.common.dtype as mstype
-from mindspore import Tensor, nn, ops
-from ring_attention import RingAttention
+import pytest
+from mindone.models.modules.utils import init_sp_group, get_sp_chuncks
+from mindone.models.modules.ring_attention import RingAttention
+
+import mindspore as ms
+from mindspore.communication import init
+from mindspore.common import dtype as mstype
+from mindspore import ops
+from mindspore.common.tensor import Tensor
 from mindspore.ops.operations.nn_ops import FlashAttentionScore
 
-def generate_inputs(B, N1, N2, S1, S2, D, input_layout, dtype, return_tensor=True):
+def generate_inputs(b, n1, n2, s1, s2, d1, input_layout, dtype, return_tensor=True):
+    '''generate inputs'''
     min_value = -1
     max_value = 1
     np.random.seed(42)
     if input_layout == "BSH":
-        query = np.random.uniform(min_value, max_value, [B, S1, N1 * D])
-        key = np.random.uniform(min_value, max_value, [B, S2, N2 * D])
-        value = np.random.uniform(min_value, max_value, [B, S2, N2 * D])
+        query = np.random.uniform(min_value, max_value, [b, s1, n1 * d1])
+        key = np.random.uniform(min_value, max_value, [b, s2, n2 * d1])
+        value = np.random.uniform(min_value, max_value, [b, s2, n2 * d1])
     elif input_layout == "BNSD":
-        query = np.random.uniform(min_value, max_value, [B, N1, S1, D])
-        key = np.random.uniform(min_value, max_value, [B, N2, S2, D])
-        value = np.random.uniform(min_value, max_value, [B, N2, S2, D])
+        query = np.random.uniform(min_value, max_value, [b, n1, s1, d1])
+        key = np.random.uniform(min_value, max_value, [b, n2, s2, d1])
+        value = np.random.uniform(min_value, max_value, [b, n2, s2, d1])
     elif input_layout == "SBH":
-        query = np.random.uniform(min_value, max_value, [S1, B, N1 * D])
-        key = np.random.uniform(min_value, max_value, [S2, B, N2 * D])
-        value = np.random.uniform(min_value, max_value, [S2, B, N2 * D])
+        query = np.random.uniform(min_value, max_value, [s1, b, n1 * d1])
+        key = np.random.uniform(min_value, max_value, [s2, b, n2 * d1])
+        value = np.random.uniform(min_value, max_value, [s2, b, n2 * d1])
     elif input_layout == "BSND":
-        query = np.random.uniform(min_value, max_value, [B, S1, N1, D])
-        key = np.random.uniform(min_value, max_value, [B, S2, N2, D])
-        value = np.random.uniform(min_value, max_value, [B, S2, N2, D])
+        query = np.random.uniform(min_value, max_value, [b, s1, n1, d1])
+        key = np.random.uniform(min_value, max_value, [b, s2, n2, d1])
+        value = np.random.uniform(min_value, max_value, [b, s2, n2, d1])
     elif input_layout == "TND":
-        query = np.random.uniform(min_value, max_value, [B * S1, N1, D])
-        key = np.random.uniform(min_value, max_value, [B * S2, N2, D])
-        value = np.random.uniform(min_value, max_value, [B * S2, N2, D])
+        query = np.random.uniform(min_value, max_value, [b * s1, n1, d1])
+        key = np.random.uniform(min_value, max_value, [b * s2, n2, d1])
+        value = np.random.uniform(min_value, max_value, [b * s2, n2, d1])
     else:
         raise ValueError(f"input_layout is invalid.")
-    real_shift = None
+    alibi_mask = None
     prefix = None
     drop_mask = None
     attn_mask = None
     padding_mask = None
     if return_tensor:
-        return Tensor(query, dtype=dtype), Tensor(key, dtype=dtype), Tensor(value, dtype=dtype), real_shift, drop_mask, padding_mask, attn_mask, prefix
-    return query, key, value, real_shift, drop_mask, padding_mask, attn_mask, prefix
+        return Tensor(query, dtype=dtype), Tensor(key, dtype=dtype), Tensor(value, dtype=dtype), alibi_mask, \
+               drop_mask, padding_mask, attn_mask, prefix
+    return query, key, value, alibi_mask, drop_mask, padding_mask, attn_mask, prefix
 
-if __name__ == '__main__':
-    # If the device_target is GPU, set the device_target to "GPU"
+
+@pytest.mark.level0
+@pytest.mark.platform_x86_cpu
+@pytest.mark.env_onecard
+def test_ring_attention():
+    """
+    Feature: Test RingAttention.
+    Description: Test RingAttention functional.
+    Expectation: Success.
+    """
     ms.set_context(mode=ms.PYNATIVE_MODE, device_target="Ascend")
+    ms.set_auto_parallel_context(parallel_mode=ms.ParallelMode.DATA_PARALLEL)
+    init()
 
     # Init parameter
-    sp = 8
-    utils.init_sp_group(sp)
+    dp = 2
+    sp = 4
+    init_sp_group(sp)
 
-    dtype = mstype.float16
-    B1 = 1
-    N1 = 8
-    S1 = 4096
-    D1 = 16
-    head_num1 = N1
-    query, key, value, real_shift, drop_mask, padding_mask, attn_mask, prefix = generate_inputs(B1, N1, N1, S1, S1, D1, "SBH", dtype)
+    bs = 16
+    n = 8
+    s = 4096
+    hidden_size = 16
+    query_output, key_output, value_output, alibi_mask_output, drop_mask_output, \
+        padding_mask_output, ring_attn_mask_output, prefix_out = generate_inputs(bs, n, n, s, s,
+                                                                                 hidden_size, "SBH", mstype.float16)
 
-    q2 = utils.get_sp_chuncks(query)
-    k2 = utils.get_sp_chuncks(key)
-    v2 = utils.get_sp_chuncks(value)
+    q2 = get_sp_chuncks(query_output, dp, sp)
+    k2 = get_sp_chuncks(key_output, dp, sp)
+    v2 = get_sp_chuncks(value_output, dp, sp)
 
-    ring_attention = RingAttention(head_num=head_num1, pre_tokens=k2.shape[0], next_tokens=0, keep_prob=1., input_layout="SBH")
-    ring_attention_output = ring_attention(q2, k2, v2, real_shift, drop_mask, padding_mask, attn_mask)
-    attn_mask = ops.ones((query.shape[0], key.shape[0]), dtype=ms.uint8)
-    attn_mask = ops.triu(attn_mask, diagonal=1)
-    flash_attention = FlashAttentionScore(head_num=head_num1, input_layout="SBH")
-    _, _, _, flash_attention_output = flash_attention(query, key, value, real_shift, drop_mask, padding_mask, attn_mask)
+    ring_attention = RingAttention(head_num=n,
+                                   pre_tokens=65535,
+                                   next_tokens=0,
+                                   keep_prob=1.,
+                                   input_layout="SBH",
+                                   dp=dp,
+                                   sp=sp)
+    ring_attention_output = ring_attention(q2, k2, v2, ring_attn_mask_output, alibi_mask_output, prefix_out,
+                                           padding_mask_output)
 
-    cur_rank = utils.get_rank()
-    sp_group_size = utils.get_sequence_parallel_world_size()
-    chunck_num = sp_group_size * 2
-    chunck_size = S1/chunck_num
+    flash_attn_mask = ops.ones((query_output.shape[0], key_output.shape[0]), dtype=mstype.uint8)
+    flash_attn_mask = ops.triu(flash_attn_mask, diagonal=1)
+    flash_attention = FlashAttentionScore(head_num=n,
+                                          pre_tokens=65535,
+                                          next_tokens=0,
+                                          keep_prob=1.,
+                                          input_layout="SBH")
+    _, _, _, flash_attention_output = flash_attention(query_output,
+                                                      key_output,
+                                                      value_output,
+                                                      alibi_mask_output,
+                                                      drop_mask_output,
+                                                      padding_mask_output,
+                                                      flash_attn_mask)
 
-    flash_attention_output = utils.get_sp_chuncks(flash_attention_output, seq_dim = 0)
-
+    flash_attention_output = get_sp_chuncks(flash_attention_output, dp, sp)
     assert np.allclose(flash_attention_output.asnumpy(), ring_attention_output.asnumpy(), 0.004, 0.004)
-
     print("end test.")

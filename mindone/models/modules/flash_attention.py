@@ -74,6 +74,8 @@ class MSFlashAttention(nn.Cell):
                 head_num=head_num,
                 input_layout="SBH",
                 keep_prob=1 - attention_dropout,
+                dp=2,
+                sp=4
             )
         elif self.use_new_flash_attention:
             self.flash_attention = FlashAttention(
@@ -153,10 +155,7 @@ class MSFlashAttention(nn.Cell):
             q = q.transpose(1, 0, 2)
             k = k.transpose(1, 0, 2)
             v = v.transpose(1, 0, 2)
-            q = get_sp_chuncks(q)
-            k = get_sp_chuncks(k)
-            v = get_sp_chuncks(v)
-            out = self.flash_attention(q, k, v, None, None, None, mask)
+            out = self.flash_attention(q, k, v, None, None, None, None)
             out = out.transpose(1, 0, 2)
         else:
             out = self.flash_attention(q, k, v, None, None, None, mask)[3]
