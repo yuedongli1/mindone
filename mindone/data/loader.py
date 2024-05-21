@@ -1,4 +1,5 @@
 from typing import List, Optional, Union
+import numpy as np
 
 import mindspore as ms
 from mindspore.communication import get_local_rank, get_local_rank_size
@@ -73,8 +74,8 @@ def create_dataloader(
         dataset,
         column_names=dataset.output_columns,
         num_parallel_workers=num_workers_dataset,
-        num_shards=device_num,
-        shard_id=rank_id,
+        num_shards=device_num // 4,
+        shard_id=rank_id // 4,
         # file reading is not CPU bounded => use multithreading for reading images and labels
         python_multiprocessing=False,
         shuffle=shuffle,
@@ -109,4 +110,17 @@ def create_dataloader(
                 batch_size, drop_remainder=drop_remainder, num_parallel_workers=num_workers_batch
             )
 
+    dataloader = dataloader.map(operations=[SeqRearrange(rank_id % 4, 4), ], input_columns=["video"], output_columns=["video"])
+
     return dataloader
+
+
+class SeqRearrange:
+    def __init__(self, shard_id, shard_size):
+        self.shard_id = shard_id
+        self.shard_size = shard_size
+
+    def __call__(self, seq):
+        splited_seq = np.split(seq, self.shard_size * 2, -2)
+        concat_seq = np.concatenate([splited_seq[self.shard_id], splited_seq[self.shard_id * 2 - 1 - self.shard_id]], -2)
+        return concat_seq
