@@ -166,7 +166,8 @@ class MultiHeadCrossAttention(nn.Cell):
         # 2+: mask adaptation for multi-head attention
         if mask is not None:
             # flip mask, since ms FA treats 1 as discard, 0 as retain.
-            mask = 1 - mask
+            # mask = 1 - mask
+            mask = ops.logical_not(mask.to(ms.bool_)).to(ms.uint8)
 
         # 3. attn compute
         if self.enable_flash_attention:
@@ -274,7 +275,8 @@ class SelfAttention(nn.Cell):
 
         # mask process
         if mask is not None:
-            mask = 1 - mask
+            # mask = 1 - mask
+            mask = ops.logical_not(mask.to(ms.bool_)).to(ms.uint8)
 
         if self.enable_flash_attention:
             if mask is not None:
@@ -715,7 +717,7 @@ class PositionEmbedding2D(nn.Cell):
         if orig_dtype == ms.bfloat16:  # BUG MS2.3rc1: ops.meshgrid() doesn't support bf16
             grid_h = grid_h.astype(ms.float32)
             grid_w = grid_w.astype(ms.float32)
-        grid_h, grid_w = ops.meshgrid(grid_w, grid_h, indexing="ij")  # here w goes first
+        grid_h, grid_w = ms.numpy.meshgrid(grid_w, grid_h, indexing="ij")  # here w goes first
         grid_h, grid_w = grid_h.astype(orig_dtype), grid_w.astype(orig_dtype)
 
         grid_h = grid_h.t().reshape(-1)

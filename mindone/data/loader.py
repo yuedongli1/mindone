@@ -74,8 +74,11 @@ def create_dataloader(
         dataset,
         column_names=dataset.output_columns,
         num_parallel_workers=num_workers_dataset,
-        num_shards=device_num // 4,
-        shard_id=rank_id // 4,
+        # for sp
+        # num_shards=device_num // 4,
+        # shard_id=rank_id // 4,
+        num_shards=device_num,
+        shard_id=rank_id,
         # file reading is not CPU bounded => use multithreading for reading images and labels
         python_multiprocessing=False,
         shuffle=shuffle,
@@ -110,7 +113,8 @@ def create_dataloader(
                 batch_size, drop_remainder=drop_remainder, num_parallel_workers=num_workers_batch
             )
 
-    dataloader = dataloader.map(operations=[SeqRearrange(rank_id % 4, 4), ], input_columns=["video"], output_columns=["video"])
+    # for sp
+    # dataloader = dataloader.map(operations=[SeqRearrange(rank_id % 4, 4), ], input_columns=["video"], output_columns=["video"])
 
     return dataloader
 

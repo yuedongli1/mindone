@@ -60,7 +60,7 @@ class MSFlashAttention(nn.Cell):
     ):
         super().__init__()
         assert FLASH_IS_AVAILABLE, "FlashAttention is not Available!"
-        self.use_ring_attention = True
+        self.use_ring_attention = False
         if self.use_ring_attention:
             logger.info("use ring attention")
         self.use_new_flash_attention = USE_NEW_FA if not self.use_ring_attention else False
