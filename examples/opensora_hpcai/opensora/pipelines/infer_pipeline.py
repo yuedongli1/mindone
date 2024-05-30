@@ -58,7 +58,6 @@ class InferPipeline:
         else:
             self.sampling_func = self.diffusion.p_sample_loop
 
-    @ms.jit
     def vae_encode(self, x: Tensor) -> Tensor:
         image_latents = self.vae.encode(x)
         image_latents = image_latents * self.scale_factor
