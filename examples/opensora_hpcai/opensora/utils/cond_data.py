@@ -94,7 +94,8 @@ def get_references(
                 ext = os.path.splitext(ref)[-1].lower()
                 if ext.lower() in VID_EXTENSIONS:
                     with VideoReader(ref) as reader:
-                        frames = reader.fetch_frames(num=len(reader))
+                        #frames = reader.fetch_frames(num=len(reader))
+                        frames = reader.fetch_frames(num=10)
                     frames = get_references.vid_transforms(frames)
                 else:
                     assert ext.lower() in IMG_EXTENSIONS, f"Unsupported file format: {ext}"
