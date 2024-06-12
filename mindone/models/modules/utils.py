@@ -20,8 +20,7 @@ from mindspore.communication import get_rank, get_group_size, create_group
 _SEQUENCE_PARALLEL_GROUP = None
 _SEQUENCE_PARALLEL_GLOBAL_RANKS = None
 _SEQUENCE_PARALLEL_GROUP_INDEX = None
-_STREAM_SEND = None
-_STREAM_RECV = None
+
 
 def init_sp_group(
         sp=1,
@@ -33,7 +32,7 @@ def init_sp_group(
     if sp > world_size:
         raise ValueError(f"The sp must be smaller or equal to total device_num, but got the sp is {sp},"
                          f"the total device_num is {world_size}")
-    if sp&(sp-1) != 0:
+    if sp & (sp - 1) != 0:
         raise ValueError(f"The sp value must be power of two, but got sp is {sp}")
 
     dp = world_size // sp
@@ -41,13 +40,8 @@ def init_sp_group(
     global _SEQUENCE_PARALLEL_GROUP
     global _SEQUENCE_PARALLEL_GLOBAL_RANKS
     global _SEQUENCE_PARALLEL_GROUP_INDEX
-    global _STREAM_SEND
-    global _STREAM_RECV
-
-    _STREAM_SEND = ms.hal.Stream()
-    _STREAM_RECV = ms.hal.Stream()
-
-    # assert _SEQUENCE_PARALLEL_GROUP is None, 'sequence parallel group is already initialized'
+    global _SP_SEND_STREAM
+    global _SP_RECV_STREAM
 
     for j in range(dp):
         start_rank = j * sp
@@ -62,31 +56,44 @@ def init_sp_group(
             _SEQUENCE_PARALLEL_GLOBAL_RANKS = ranks
             _SEQUENCE_PARALLEL_GROUP_INDEX = j
 
-def get_stream_send():
-    return _STREAM_SEND
+    _SP_SEND_STREAM = ms.hal.Stream()
+    _SP_RECV_STREAM = ms.hal.Stream()
 
-def get_stream_recv():
-    return _STREAM_RECV
+
+def get_sequence_parallel_send_stream():
+    """Get the sequence parallel send stream."""
+    return _SP_SEND_STREAM
+
+
+def get_sequence_parallel_recv_stream():
+    """Get the sequence parallel recv stream."""
+    return _SP_RECV_STREAM
+
 
 def get_sequence_parallel_group():
     """Get the sequence parallel group the caller rank belongs to."""
     return _SEQUENCE_PARALLEL_GROUP
 
+
 def get_sequence_parallel_global_ranks():
     """Get all global ranks of the sequence parallel group that the caller rank belongs to."""
     return _SEQUENCE_PARALLEL_GLOBAL_RANKS
+
 
 def get_sequence_parallel_world_size():
     """Return world size for the sequence parallel group."""
     return get_group_size(group=get_sequence_parallel_group())
 
+
 def get_sequence_parallel_rank():
     """Return my rank for the sequence parallel group."""
     return get_rank(group=get_sequence_parallel_group())
 
+
 def get_sequence_parallel_group_index():
     """Get the sequence parallel group index the caller rank belongs to."""
     return _SEQUENCE_PARALLEL_GROUP_INDEX
+
 
 def get_sp_chuncks(batch, dp, sp, seq_dim=0, batch_dim=1, enable_dp_shard=True):
     """
@@ -138,15 +145,15 @@ def get_sp_chuncks(batch, dp, sp, seq_dim=0, batch_dim=1, enable_dp_shard=True):
                 batch = batch.view(
                     dp,
                     batch.shape[batch_dim] // dp,
-                    *batch.shape[(batch_dim + 1) :],
-                    )
+                    *batch.shape[(batch_dim + 1):],
+                )
             else:
                 batch = batch.view(
                     *batch.shape[0:batch_dim],
                     dp,
                     batch.shape[batch_dim] // dp,
-                    *batch.shape[(batch_dim + 1) :],
-                    )
+                    *batch.shape[(batch_dim + 1):],
+                )
             sp_group_index = Tensor([sp_group_index])
             batch = batch.index_select(batch_dim, sp_group_index).squeeze(batch_dim)
 
@@ -155,22 +162,22 @@ def get_sp_chuncks(batch, dp, sp, seq_dim=0, batch_dim=1, enable_dp_shard=True):
             batch = batch.view(
                 2 * sp,
                 batch.shape[seq_dim] // (2 * sp),
-                *batch.shape[(seq_dim + 1) :],
-                )
+                *batch.shape[(seq_dim + 1):],
+            )
         else:
             batch = batch.view(
                 *batch.shape[0:seq_dim],
                 2 * sp,
                 batch.shape[seq_dim] // (2 * sp),
-                *batch.shape[(seq_dim + 1) :],
-                )
+                *batch.shape[(seq_dim + 1):],
+            )
 
         index = Tensor([sp_rank, (2 * sp - sp_rank - 1)])
         batch = batch.index_select(seq_dim, index)
 
         if seq_dim == 0:
-            batch = batch.view(-1, *batch.shape[(seq_dim + 2) :])
+            batch = batch.view(-1, *batch.shape[(seq_dim + 2):])
         else:
-            batch = batch.view(*batch.shape[0:seq_dim], -1, *batch.shape[(seq_dim + 2) :])
+            batch = batch.view(*batch.shape[0:seq_dim], -1, *batch.shape[(seq_dim + 2):])
 
     return batch

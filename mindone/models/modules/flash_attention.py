@@ -56,11 +56,12 @@ class MSFlashAttention(nn.Cell):
         attention_dropout: float = 0.0,
         input_layout: str = "BNSD",
         high_precision: bool = True,
+        use_ring_attention: bool = False,
         dtype: ms.dtype = ms.float16,
     ):
         super().__init__()
         assert FLASH_IS_AVAILABLE, "FlashAttention is not Available!"
-        self.use_ring_attention = False
+        self.use_ring_attention = use_ring_attention
         if self.use_ring_attention:
             logger.info("use ring attention")
         self.use_new_flash_attention = USE_NEW_FA if not self.use_ring_attention else False
@@ -72,7 +73,6 @@ class MSFlashAttention(nn.Cell):
             self.flash_attention = RingAttention(
                 scale_value=head_dim ** -0.5,
                 head_num=head_num,
-                input_layout="SBH",
                 keep_prob=1 - attention_dropout,
                 dp=2,
                 sp=4
@@ -152,11 +152,7 @@ class MSFlashAttention(nn.Cell):
             mask = mask.to(ms.uint8)
 
         if self.use_ring_attention:
-            q = q.transpose(1, 0, 2)
-            k = k.transpose(1, 0, 2)
-            v = v.transpose(1, 0, 2)
-            out = self.flash_attention(q, k, v, None, None, None, None)
-            out = out.transpose(1, 0, 2)
+            out = self.flash_attention(q, k, v, attn_mask_type="full")
         else:
             out = self.flash_attention(q, k, v, None, None, None, mask)[3]
         out = self._rearange_output(out, q_dtype)

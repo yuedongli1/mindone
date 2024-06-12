@@ -2,7 +2,8 @@ import logging
 
 import numpy as np
 
-from mindspore import nn, ops
+from mindspore import nn, ops, mint
+from ..layers.blocks import Conv2d
 
 _logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class Upsample(nn.Cell):
         super().__init__()
         self.with_conv = with_conv
         if self.with_conv:
-            self.conv = nn.Conv2d(
+            self.conv = Conv2d(
                 in_channels, in_channels, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True
             )
 
@@ -52,7 +53,7 @@ class Downsample(nn.Cell):
         self.with_conv = with_conv
         if self.with_conv:
             # no asymmetric padding in torch conv, must do it ourselves
-            self.conv = nn.Conv2d(
+            self.conv = Conv2d(
                 in_channels, in_channels, kernel_size=3, stride=2, pad_mode="valid", padding=0, has_bias=True
             )
 
@@ -84,23 +85,23 @@ class ResnetBlock(nn.Cell):
         self.use_conv_shortcut = conv_shortcut
 
         self.norm1 = Normalize(in_channels)
-        self.conv1 = nn.Conv2d(
+        self.conv1 = Conv2d(
             in_channels, out_channels, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True
         )
         if temb_channels > 0:
             self.temb_proj = nn.Dense(temb_channels, out_channels, bias_init="normal")
         self.norm2 = Normalize(out_channels)
         self.dropout = nn.Dropout(p=dropout)
-        self.conv2 = nn.Conv2d(
+        self.conv2 = Conv2d(
             out_channels, out_channels, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True
         )
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                self.conv_shortcut = nn.Conv2d(
+                self.conv_shortcut = Conv2d(
                     in_channels, out_channels, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True
                 )
             else:
-                self.nin_shortcut = nn.Conv2d(
+                self.nin_shortcut = Conv2d(
                     in_channels, out_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True
                 )
 
@@ -133,10 +134,10 @@ class AttnBlock(nn.Cell):
         self.in_channels = in_channels
         self.bmm = ops.BatchMatMul()
         self.norm = Normalize(in_channels)
-        self.q = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True)
-        self.k = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True)
-        self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True)
-        self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True)
+        self.q = Conv2d(in_channels, in_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True)
+        self.k = Conv2d(in_channels, in_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True)
+        self.v = Conv2d(in_channels, in_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True)
+        self.proj_out = Conv2d(in_channels, in_channels, kernel_size=1, stride=1, pad_mode="valid", has_bias=True)
 
     def construct(self, x):
         h_ = x
@@ -205,7 +206,7 @@ class Encoder(nn.Cell):
         self.in_channels = in_channels
 
         # downsampling
-        self.conv_in = nn.Conv2d(
+        self.conv_in = Conv2d(
             in_channels, self.ch, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True
         )
 
@@ -259,7 +260,7 @@ class Encoder(nn.Cell):
 
         # end
         self.norm_out = Normalize(block_in)
-        self.conv_out = nn.Conv2d(
+        self.conv_out = Conv2d(
             block_in,
             2 * z_channels if double_z else z_channels,
             kernel_size=3,
@@ -337,7 +338,7 @@ class Decoder(nn.Cell):
         _logger.debug("Working with z of shape {} = {} dimensions.".format(self.z_shape, np.prod(self.z_shape)))
 
         # z to block_in
-        self.conv_in = nn.Conv2d(
+        self.conv_in = Conv2d(
             z_channels, block_in, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True
         )
 
@@ -385,7 +386,7 @@ class Decoder(nn.Cell):
 
         # end
         self.norm_out = Normalize(block_in)
-        self.conv_out = nn.Conv2d(block_in, out_ch, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True)
+        self.conv_out = Conv2d(block_in, out_ch, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True)
 
     def construct(self, z):
         # timestep embedding

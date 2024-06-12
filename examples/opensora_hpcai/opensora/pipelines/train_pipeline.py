@@ -1,5 +1,6 @@
 import logging
 from typing import Optional, Tuple
+import numpy as np
 
 import mindspore as ms
 from mindspore import Tensor, nn, ops, mint, _no_grad
@@ -256,8 +257,10 @@ class DiffusionWithLoss(nn.Cell):
         fps: Optional[Tensor] = None,
         ar: Optional[Tensor] = None,
     ):
-        t = ops.randint(0, self.diffusion.num_timesteps, (x.shape[0],))
-        noise = ops.randn_like(x)
+        # t = ops.randint(0, self.diffusion.num_timesteps, (x.shape[0],))
+        # noise = ops.randn_like(x)
+        t = ms.Tensor(np.random.randint(0, self.diffusion.num_timesteps, size=(x.shape[0],)), ms.int32)
+        noise = ms.Tensor(np.random.randn(*x.shape), ms.float32)
         x_t = self.diffusion.q_sample(x.to(ms.float32), t, noise=noise)
 
         if frames_mask is not None:

@@ -1,15 +1,12 @@
 # model
 model_version: v1.1
-pretrained_model_path: "models/PixArt-XL-2-1024-MS.ckpt"
+pretrained_model_path: "models/opensora_v1.1_stage3.ckpt"
 model_max_length: 200
 
 enable_flash_attention: True
 use_recompute: True
 
 # data
-#image_size: [ 512, 512 ]
-#num_frames: 16
-# change for pynative
 image_size: [ 512, 512 ]
 num_frames: 16
 frame_stride: 3
@@ -33,7 +30,7 @@ clip_grad: True
 max_grad_norm: 5.0
 use_ema: False
 
-optim: "adamw_re"
+optim: "adamw"
 optim_eps: 1.e-8
 weight_decay: 0.
 

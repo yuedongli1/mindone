@@ -96,6 +96,12 @@ def create_dataloader(
                 max_rowsize=max_rowsize,
             )
 
+    # for sp
+    # dataloader = dataloader.map(operations=[SeqRearrange(rank_id % 4, 4), ],
+    #                             input_columns=["video"], output_columns=["video"])
+    # dataloader = dataloader.map(operations=[SeqRearrange(rank_id % 4, 4), ],
+    #                             input_columns=["frames_mask"], output_columns=["frames_mask"])
+
     if project_columns:
         dataloader = dataloader.project(project_columns)
 
@@ -113,9 +119,6 @@ def create_dataloader(
                 batch_size, drop_remainder=drop_remainder, num_parallel_workers=num_workers_batch
             )
 
-    # for sp
-    # dataloader = dataloader.map(operations=[SeqRearrange(rank_id % 4, 4), ], input_columns=["video"], output_columns=["video"])
-
     return dataloader
 
 
@@ -125,6 +128,5 @@ class SeqRearrange:
         self.shard_size = shard_size
 
     def __call__(self, seq):
-        splited_seq = np.split(seq, self.shard_size * 2, -2)
-        concat_seq = np.concatenate([splited_seq[self.shard_id], splited_seq[self.shard_id * 2 - 1 - self.shard_id]], -2)
-        return concat_seq
+        splited_seq = np.split(seq, self.shard_size, 0)
+        return splited_seq[self.shard_id]
