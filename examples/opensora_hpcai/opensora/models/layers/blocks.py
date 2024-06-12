@@ -14,6 +14,50 @@ from mindone.models.modules.pos_embed import _get_1d_sincos_pos_embed_from_grid,
 from .rotary_embedding import rope_1d
 
 
+class Conv2d(nn.Cell):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, pad_mode='same', padding=0, dilation=1,
+                 group=1, has_bias=False, weight_init='normal', bias_init='zeros', data_format='NCHW'):
+        super(Conv2d, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
+        if isinstance(kernel_size, int):
+            self.kernel_size = (kernel_size, kernel_size)
+        elif isinstance(kernel_size, tuple):
+            self.kernel_size = kernel_size
+
+        self.stride = stride
+        self.pad_mode = pad_mode
+        self.padding = padding
+        self.dilation = dilation
+        self.group = group
+        self.has_bias = has_bias
+        self.weight_init = weight_init
+        self.bias_init = bias_init
+
+        # Initialize weights and bias
+        self.weight = Parameter(
+            initializer(weight_init, [out_channels, in_channels // group, *self.kernel_size]), name="weight")
+        if has_bias:
+            self.bias = Parameter(initializer(bias_init, [out_channels]), name="bias")
+        else:
+            self.bias = None
+
+    def construct(self, x):
+        if self.pad_mode == 'same' or self.pad_mode == 'valid':
+            return ops.extend.conv2d(x, self.weight, self.bias, self.stride, self.pad_mode, self.dilation, self.group)
+        elif self.pad_mode == 'pad':
+            if isinstance(self.padding, int):
+                padding = (self.padding, self.padding, self.padding, self.padding)
+                x = ops.pad_ext(x, padding)
+                return ops.extend.conv2d(x, self.weight, self.bias, self.stride, 0, self.dilation, self.group)
+            else: #tuple/list
+                x = ops.pad_ext(x, self.padding)
+                return ops.extend.conv2d(x, self.weight, self.bias, self.stride, 0, self.dilation, self.group)
+        else:
+            raise ValueError(f"Unsupported pad_mode: {self.pad_mode}")
+
+
 class LlamaRMSNorm(nn.Cell):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -99,7 +143,8 @@ class MultiHeadCrossAttention(nn.Cell):
         ```
     """
 
-    def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0, has_bias=True, enable_flash_attention=False):
+    def __init__(self, d_model, num_heads, attn_drop=0.0, proj_drop=0.0,
+                 has_bias=True, enable_flash_attention=False, use_ring_attention=False):
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
@@ -123,6 +168,7 @@ class MultiHeadCrossAttention(nn.Cell):
                 attention_dropout=attn_drop,
                 input_layout="BSH",
                 dtype=attn_dtype,
+                use_ring_attention=use_ring_attention
             )
         else:
             # TODO: test ms.bfloat16 for vanilla attention
@@ -214,6 +260,7 @@ class SelfAttention(nn.Cell):
         norm_layer: Type[nn.Cell] = LlamaRMSNorm,
         enable_flash_attention=False,
         rope=None,
+        use_ring_attention=False
     ):
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
@@ -239,6 +286,7 @@ class SelfAttention(nn.Cell):
                 attention_dropout=attn_drop,
                 input_layout="BSH",
                 dtype=attn_dtype,
+                use_ring_attention=use_ring_attention
             )
         else:
             # TODO: support ms.bfloat16
@@ -491,8 +539,8 @@ class PatchEmbed(nn.Cell):
         super().__init__()
         self.patch_size: Tuple = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
         self.embed_dim = embed_dim
-        self.proj = nn.Conv2d(
-            in_chans, embed_dim, kernel_size=patch_size, stride=patch_size, pad_mode="same", has_bias=bias
+        self.proj = Conv2d(
+            in_chans, embed_dim, kernel_size=patch_size, stride=patch_size, pad_mode="valid", has_bias=bias
         )
 
     def construct(self, x: Tensor) -> Tensor:

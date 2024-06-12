@@ -61,11 +61,13 @@ class STDiT2Block(nn.Cell):
             qkv_bias=True,
             enable_flash_attention=enable_flashattn,
             qk_norm=qk_norm,
+            use_ring_attention=False
         )
         self.scale_shift_table = Parameter(ops.randn(6, hidden_size) / hidden_size**0.5)
 
         # cross attn
-        self.cross_attn = self.mha_cls(hidden_size, num_heads, enable_flash_attention=enable_flashattn)
+        self.cross_attn = self.mha_cls(hidden_size, num_heads,
+                                       enable_flash_attention=enable_flashattn, use_ring_attention=False)
 
         # mlp branch
         self.norm2 = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
@@ -83,6 +85,7 @@ class STDiT2Block(nn.Cell):
             enable_flash_attention=self.enable_flashattn,
             rope=rope,
             qk_norm=qk_norm,
+            use_ring_attention=False
         )
         self.scale_shift_table_temporal = Parameter(ops.randn(3, hidden_size) / hidden_size**0.5)  # new
 

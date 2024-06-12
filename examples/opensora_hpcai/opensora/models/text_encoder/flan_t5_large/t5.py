@@ -8,6 +8,7 @@ import numpy as np
 import mindspore as ms
 import mindspore.nn as nn
 import mindspore.ops as ops
+import mindspore.mint as mint
 
 from .mininlp.activations import ACT2FN
 from .mininlp.configs import MINDNLP_MODEL_URL_BASE
