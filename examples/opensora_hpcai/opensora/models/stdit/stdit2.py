@@ -254,8 +254,8 @@ class STDiT2(nn.Cell):
             self.x_embedder = PatchEmbed(patch_size[1], in_channels, hidden_size, bias=True)
 
         self.t_embedder = TimestepEmbedder(hidden_size)
-        self.t_block = nn.SequentialCell(nn.SiLU(), nn.Dense(hidden_size, 6 * hidden_size))
-        self.t_block_temp = nn.SequentialCell(nn.SiLU(), nn.Dense(hidden_size, 3 * hidden_size))  # new
+        self.t_block = nn.SequentialCell(nn.SiLU(), mint.nn.Linear(hidden_size, 6 * hidden_size))
+        self.t_block_temp = nn.SequentialCell(nn.SiLU(), mint.nn.Linear(hidden_size, 3 * hidden_size))  # new
         self.y_embedder = CaptionEmbedder(
             in_channels=caption_channels,
             hidden_size=hidden_size,
@@ -510,7 +510,7 @@ class STDiT2(nn.Cell):
     def initialize_weights(self):
         # Initialize transformer layers:
         def _basic_init(module):
-            if isinstance(module, nn.Dense):
+            if isinstance(module, mint.nn.Linear):
                 xavier_uniform_(module.weight)
                 if module.bias is not None:
                     constant_(module.bias, 0)

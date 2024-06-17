@@ -153,8 +153,8 @@ class MultiHeadCrossAttention(nn.Cell):
         self.head_dim = d_model // num_heads
 
         # TODO: model impr: remove bias
-        self.q_linear = nn.Dense(d_model, d_model, has_bias=has_bias)
-        self.kv_linear = nn.Dense(d_model, d_model * 2, has_bias=has_bias)
+        self.q_linear = mint.nn.Linear(d_model, d_model, bias=has_bias)
+        self.kv_linear = mint.nn.Linear(d_model, d_model * 2, bias=has_bias)
 
         self.enable_flash_attention = (
             enable_flash_attention and FLASH_IS_AVAILABLE and (ms.context.get_context("device_target") == "Ascend")
@@ -175,7 +175,7 @@ class MultiHeadCrossAttention(nn.Cell):
             attn_dtype = ms.float32
             self.attention = Attention(self.head_dim, attn_drop=attn_drop, attn_dtype=attn_dtype)
 
-        self.proj = nn.Dense(d_model, d_model, has_bias=has_bias).to_float(attn_dtype)
+        self.proj = mint.nn.Linear(d_model, d_model, bias=has_bias).to_float(attn_dtype)
         self.proj_drop = nn.Dropout(p=proj_drop).to_float(attn_dtype)
 
     def construct(self, x, cond, mask=None):
@@ -270,7 +270,7 @@ class SelfAttention(nn.Cell):
         self.scale = head_dim**-0.5
         self.rotary_emb = rope
 
-        self.qkv = nn.Dense(dim, dim * 3, has_bias=qkv_bias, weight_init="XavierUniform", bias_init="Zero")
+        self.qkv = mint.nn.Linear(dim, dim * 3, bias=qkv_bias, weight_init="XavierUniform", bias_init="Zero")
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
 
@@ -293,7 +293,7 @@ class SelfAttention(nn.Cell):
             attn_dtype = ms.float32
             self.attention = Attention(head_dim, attn_drop=attn_drop, attn_dtype=attn_dtype)
 
-        self.proj = nn.Dense(dim, dim, weight_init="XavierUniform", bias_init="Zero").to_float(attn_dtype)
+        self.proj = mint.nn.Linear(dim, dim, weight_init="XavierUniform", bias_init="Zero").to_float(attn_dtype)
         self.proj_drop = nn.Dropout(p=proj_drop).to_float(attn_dtype)
 
     def construct(self, x, mask=None, freqs_cis: Optional[Tensor] = None):
@@ -444,7 +444,7 @@ class T2IFinalLayer(nn.Cell):
         super().__init__()
         self.norm_final = LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         # (1152, 4*8)
-        self.linear = nn.Dense(hidden_size, num_patch * out_channels, has_bias=True)
+        self.linear = mint.nn.Linear(hidden_size, num_patch * out_channels, bias=True)
         self.scale_shift_table = Parameter(ops.randn(2, hidden_size) / hidden_size**0.5)
         self.out_channels = out_channels
         self.d_t = d_t
@@ -565,7 +565,7 @@ class LinearPatchEmbed(nn.Cell):
         super().__init__()
         self.patch_size: Tuple = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
         self.embed_dim = embed_dim
-        self.proj = nn.Dense(patch_size * patch_size * in_chans, embed_dim, has_bias=bias)
+        self.proj = mint.nn.Linear(patch_size * patch_size * in_chans, embed_dim, bias=bias)
 
     def construct(self, x: Tensor) -> Tensor:
         b, c, h, w = x.shape
@@ -590,9 +590,9 @@ class Mlp(nn.Cell):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = nn.Dense(in_channels=in_features, out_channels=hidden_features, has_bias=True)
+        self.fc1 = mint.nn.Linear(in_features, hidden_features, bias=True)
         self.act = act_layer()
-        self.fc2 = nn.Dense(in_channels=hidden_features, out_channels=out_features, has_bias=True)
+        self.fc2 = mint.nn.Linear(hidden_features, out_features, bias=True)
         self.drop = nn.Dropout(p=drop)
 
     def construct(self, x: Tensor) -> Tensor:
@@ -646,9 +646,9 @@ class TimestepEmbedder(nn.Cell):
     def __init__(self, hidden_size, frequency_embedding_size=256):
         super().__init__()
         self.mlp = nn.SequentialCell(
-            nn.Dense(frequency_embedding_size, hidden_size, has_bias=True),
+            mint.nn.Linear(frequency_embedding_size, hidden_size, bias=True),
             nn.SiLU(),
-            nn.Dense(hidden_size, hidden_size, has_bias=True),
+            mint.nn.Linear(hidden_size, hidden_size, bias=True),
         )
         self.frequency_embedding_size = frequency_embedding_size
 
@@ -712,9 +712,9 @@ class SizeEmbedder(nn.Cell):
     def __init__(self, hidden_size, frequency_embedding_size=256):
         super().__init__()
         self.mlp = nn.SequentialCell(
-            nn.Dense(frequency_embedding_size, hidden_size),
+            mint.nn.Linear(frequency_embedding_size, hidden_size),
             nn.SiLU(),
-            nn.Dense(hidden_size, hidden_size),
+            mint.nn.Linear(hidden_size, hidden_size),
         )
         self.frequency_embedding_size = frequency_embedding_size
         self.outdim = hidden_size

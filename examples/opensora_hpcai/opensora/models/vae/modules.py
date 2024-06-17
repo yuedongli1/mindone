@@ -89,7 +89,7 @@ class ResnetBlock(nn.Cell):
             in_channels, out_channels, kernel_size=3, stride=1, pad_mode="pad", padding=1, has_bias=True
         )
         if temb_channels > 0:
-            self.temb_proj = nn.Dense(temb_channels, out_channels, bias_init="normal")
+            self.temb_proj = mint.nn.Linear(temb_channels, out_channels, bias_init="normal")
         self.norm2 = Normalize(out_channels)
         self.dropout = nn.Dropout(p=dropout)
         self.conv2 = Conv2d(

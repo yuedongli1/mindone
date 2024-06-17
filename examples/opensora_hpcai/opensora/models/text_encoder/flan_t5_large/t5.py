@@ -64,8 +64,8 @@ class T5DenseActDense(nn.Cell):
 
     def __init__(self, config: T5Config):
         super().__init__()
-        self.wi = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wo = nn.Dense(config.d_ff, config.d_model, has_bias=False)
+        self.wi = mint.nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = mint.nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = Dropout(p=config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -84,9 +84,9 @@ class T5DenseGatedActDense(nn.Cell):
 
     def __init__(self, config: T5Config):
         super().__init__()
-        self.wi_0 = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wi_1 = nn.Dense(config.d_model, config.d_ff, has_bias=False)
-        self.wo = nn.Dense(config.d_ff, config.d_model, has_bias=False)
+        self.wi_0 = mint.nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wi_1 = mint.nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = mint.nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = Dropout(p=config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -141,10 +141,10 @@ class T5Attention(nn.Cell):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.k = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.v = nn.Dense(self.d_model, self.inner_dim, has_bias=False)
-        self.o = nn.Dense(self.inner_dim, self.d_model, has_bias=False)
+        self.q = mint.nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.k = mint.nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.v = mint.nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o = mint.nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
