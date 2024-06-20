@@ -37,7 +37,9 @@ from mindone.utils.logger import set_logger
 from mindone.utils.params import count_params
 from mindone.utils.seed import set_random_seed
 from mindone.trainers.adamw_zero2 import AdamWeightDecayZeRO2
+from mindone.trainers.adamw_zero import AdamWeightDecay
 from mindone.models.modules.utils import init_sp_group
+from mindone.trainers.create_common import initialize_model_parallel
 
 # from opensora.utils.model_utils import WHITELIST_OPS
 
@@ -174,6 +176,9 @@ def main(args):
 
     # init for sp
     # init_sp_group(device_num // 2)
+
+    # init for sp
+    # initialize_model_parallel()
 
     set_logger(name="", output_dir=args.output_path, rank=rank_id, log_level=eval(args.log_level))
 
@@ -468,7 +473,18 @@ def main(args):
 
     # build optimizer
     use_AdamWeightDecayZeRO2 = False
-    if use_AdamWeightDecayZeRO2:
+    use_AdamWeightDecayZeRO3 = False
+    if not use_AdamWeightDecayZeRO2 and not use_AdamWeightDecayZeRO3:
+        optimizer = create_optimizer(
+            latent_diffusion_with_loss.trainable_params(),
+            name=args.optim,
+            betas=args.betas,
+            eps=args.optim_eps,
+            group_strategy=args.group_strategy,
+            weight_decay=args.weight_decay,
+            lr=lr,
+        )
+    else:
         param_optimizer = latent_diffusion_with_loss.trainable_params()
 
         decay_params = list(filter(decay_filter, param_optimizer))
@@ -479,26 +495,29 @@ def main(args):
         if len(other_params) > 0:
             group_params.append({"params": other_params, "weight_decay": 0.0})
         group_params.append({"order_params": param_optimizer})
-        optimizer = AdamWeightDecayZeRO2(params=group_params,
-                                         use_parallel=True,
-                                         opt_parallel_group=GlobalComm.WORLD_COMM_GROUP,
-                                         cpu_offload=False,
-                                         beta1=args.betas[0],
-                                         beta2=args.betas[1],
-                                         eps=args.optim_eps,
-                                         learning_rate=lr)
-        logger.info("use AdamWeightDecayZeRO2")
+        if use_AdamWeightDecayZeRO2:
+            optimizer = AdamWeightDecayZeRO2(params=group_params,
+                                             use_parallel=True,
+                                             learning_rate=lr,
+                                             beta1=args.betas[0],
+                                             beta2=args.betas[1],
+                                             eps=args.optim_eps,
+                                             opt_parallel_group=GlobalComm.WORLD_COMM_GROUP,
+                                             cpu_offload=False)
+            logger.info("use AdamWeightDecayZeRO2")
+        else:
+            optimizer = AdamWeightDecay(latent_diffusion_with_loss,
+                                        group_params,
+                                        learning_rate=lr,
+                                        beta1=args.betas[0],
+                                        beta2=args.betas[1],
+                                        eps=args.optim_eps,
+                                        zero_level="z3",
+                                        opt_parallel_group=GlobalComm.WORLD_COMM_GROUP,
+                                        cpu_offload=False,
+                                        )
+            logger.info("use AdamWeightDecayZeRO3")
 
-    else:
-        optimizer = create_optimizer(
-            latent_diffusion_with_loss.trainable_params(),
-            name=args.optim,
-            betas=args.betas,
-            eps=args.optim_eps,
-            group_strategy=args.group_strategy,
-            weight_decay=args.weight_decay,
-            lr=lr,
-        )
 
     if args.loss_scaler_type == "dynamic":
         loss_scaler = DynamicLossScaleUpdateCell(
