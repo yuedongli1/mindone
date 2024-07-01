@@ -204,7 +204,7 @@ class MultiHeadCrossAttention(nn.Cell):
 
         # kv: (B N_k C*2) -> (B N_k 2 C) -> (B N_k 2 num_head head_dim).
         kv = ops.reshape(kv, (B, N_k, 2, self.num_heads, self.head_dim))
-        k, v = mint.split(kv, 1, axis=2)
+        k, v = mint.split(kv, 1, 2)
         # (b n h d)
         k = ops.squeeze(k, axis=2)
         v = ops.squeeze(v, axis=2)
@@ -307,7 +307,7 @@ class SelfAttention(nn.Cell):
         qkv = self.qkv(x)
         # (b, n, 3*h*d) -> (b, n, 3, h, d)
         qkv = ops.reshape(qkv, (B, N, 3, self.num_heads, self.head_dim))
-        q, k, v = mint.split(qkv, 1, axis=2)  # (b n h d)
+        q, k, v = mint.split(qkv, 1, 2)  # (b n h d)
         q = ops.squeeze(q, axis=2)
         k = ops.squeeze(k, axis=2)
         v = ops.squeeze(v, axis=2)
