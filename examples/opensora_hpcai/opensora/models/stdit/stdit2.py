@@ -465,7 +465,7 @@ class STDiT2(nn.Cell):
         if cfg_channel is None:
             cfg_channel = model_out.shape[1] // 2
         eps, rest = model_out[:, :cfg_channel], model_out[:, cfg_channel:]
-        cond_eps, uncond_eps = mint.split(eps, len(eps) // 2, axis=0)
+        cond_eps, uncond_eps = mint.split(eps, len(eps) // 2, 0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
         eps = ops.cat([half_eps, half_eps], axis=0)
         return ops.cat([eps, rest], axis=1)

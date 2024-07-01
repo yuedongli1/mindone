@@ -85,7 +85,7 @@ class DiffusionWithLoss(nn.Cell):
     def vae_encode(self, x):
         c = x.shape[0] // 4
         image_latents = []
-        x_batches = mint.split(x, c, axis=0)
+        x_batches = mint.split(x, c, 0)
         for x_batch in x_batches:
             image_latents.append(self.vae.encode(x_batch))
         image_latents = ops.cat(image_latents, axis=0)
@@ -138,7 +138,7 @@ class DiffusionWithLoss(nn.Cell):
 
             if self.micro_batch_size is not None:
                 # split into smaller frames to reduce memory cost
-                x = ops.split(x, self.micro_batch_size, axis=0)
+                x = mint.split(x, self.micro_batch_size, 0)
                 z_clips = []
                 for clip in x:
                     z_clips.append(ops.stop_gradient(self.vae_encode(clip)))
@@ -287,7 +287,7 @@ class DiffusionWithLoss(nn.Cell):
         # (b c t h w),
         B, C, F = x_t.shape[:3]
         assert model_output.shape == (B, C * 2, F) + x_t.shape[3:]
-        model_output, model_var_values = mint.split(model_output, C, axis=1)
+        model_output, model_var_values = mint.split(model_output, C, 1)
 
         # Learn the variance using the variational bound, but don't let it affect our mean prediction.
         vb = self._cal_vb(ops.stop_gradient(model_output), model_var_values, x, x_t, t, frames_mask)
@@ -425,7 +425,7 @@ class DiffusionWithLossFiTLike(DiffusionWithLoss):
         # (b c t h w),
         B, C, F = x_t.shape[:3]
         assert model_output.shape == (B, C * 2, F) + x_t.shape[3:]
-        model_output, model_var_values = ops.split(model_output, C, axis=1)
+        model_output, model_var_values = mint.split(model_output, C, 1)
 
         # Learn the variance using the variational bound, but don't let it affect our mean prediction.
         patch_mask = temporal_mask[:, :, None, None] * spatial_mask[:, None, :, None]

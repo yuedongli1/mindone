@@ -631,5 +631,6 @@ def main(args):
 
 if __name__ == "__main__":
     logger.debug("process id:", os.getpid())
+    ms.set_context(mempool_block_size="57GB")
     args = parse_args()
     main(args)
